@@ -1,54 +1,62 @@
 package ru.agniaendie.mlwborderlinker.handler;
 
-import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.event.entity.living.LivingEvent;
+import net.minecraftforge.event.TickEvent;
+import java.util.List;
 
-import static com.mojang.text2speech.Narrator.LOGGER;
+public class WorldBorderHandler implements IWorldBorderHandler{
 
-public class WorldBorderHandler implements IWorldBorderHandler {
+    public void TransferEntity(TickEvent.LevelTickEvent event) {
+        if (event.phase != TickEvent.Phase.END || event.level.isClientSide) return;
 
-    @Override
-    public void TransferEntity(LivingEvent.LivingTickEvent event) {
-        Entity entity = event.getEntity();
+        ServerLevel level = (ServerLevel) event.level;
+        WorldBorder border = level.getWorldBorder();
+        double margin = -2.5D; // Зазор детекции
+        double pushInside = 5.0D; // Глубина заброса
 
-        if (entity.level().isClientSide || !entity.isAlive()) return;
+        for (Entity entity : level.getAllEntities()) {
+            if (entity == null || !entity.isAlive() || entity.isPassenger()) continue;
 
-        WorldBorder border = entity.level().getWorldBorder();
-        double margin = -1.5D;
-
-        if (!border.isWithinBounds(entity.getX(), entity.getZ(), margin)) {
-
-            Vec3 currentMotion = entity.getDeltaMovement();
-
-            double targetX = entity.getX() * -1;
-            double targetZ = entity.getZ() * -1;
-            double pushInside = 3.0D;
-
-            targetX = targetX > 0 ? targetX - pushInside : targetX + pushInside;
-            targetZ = targetZ > 0 ? targetZ - pushInside : targetZ + pushInside;
-
-            float yaw = entity.getYRot();
-            float pitch = entity.getXRot();
-
-            if (entity instanceof ServerPlayer player) {
-                player.teleportTo((ServerLevel) player.level(), targetX, player.getY(), targetZ, yaw, pitch);
-            } else {
-                entity.absMoveTo(targetX, entity.getY(), targetZ, yaw, pitch);
-                entity.hasImpulse = true;
+            if (!border.isWithinBounds(entity.getX(), entity.getZ(), margin)) {
+                teleportChain(entity, level, pushInside);
             }
-
-            entity.setDeltaMovement(currentMotion);
-
-            entity.hasImpulse = true;
-            entity.hurtMarked = true;
-
-            LOGGER.info("Сущность {} зеркально перенесена", entity.getName().getString());
         }
     }
 
+    private static void teleportChain(Entity root, ServerLevel level, double pushInside) {
+        double targetX = -root.getX();
+        double targetZ = -root.getZ();
+
+        targetX = targetX > 0 ? targetX - pushInside : targetX + pushInside;
+        targetZ = targetZ > 0 ? targetZ - pushInside : targetZ + pushInside;
+
+        List<Entity> passengers = root.getPassengers();
+        Vec3 motion = root.getDeltaMovement();
+
+        root.ejectPassengers();
+
+        performSingleTeleport(root, level, targetX, root.getY(), targetZ);
+        for (Entity passenger : passengers) {
+            performSingleTeleport(passenger, level, targetX, root.getY(), targetZ);
+            passenger.startRiding(root, true);
+        }
+
+        root.setDeltaMovement(motion);
+        level.getChunkSource().broadcastAndSend(root, new ClientboundSetEntityMotionPacket(root));
+    }
+
+    private static void performSingleTeleport(Entity e, ServerLevel level, double x, double y, double z) {
+        if (e instanceof ServerPlayer player) {
+            player.teleportTo(level, x, y, z, e.getYRot(), e.getXRot());
+        } else {
+            e.absMoveTo(x, y, z, e.getYRot(), e.getXRot());
+            e.setPos(x, y, z);
+            e.hurtMarked = true;
+        }
+    }
 }

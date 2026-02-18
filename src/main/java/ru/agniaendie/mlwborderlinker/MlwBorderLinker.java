@@ -134,7 +134,7 @@ public class MlwBorderLinker
     @Mod.EventBusSubscriber(modid = MODID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.DEDICATED_SERVER)
     public static class ServerModEvents{
         @SubscribeEvent
-        public static void onPlayerTick(LivingEvent.LivingTickEvent event) {
+        public static void onLevelTick(TickEvent.LevelTickEvent  event) {
             if (worldBorderHandler == null) {
                 worldBorderHandler = new WorldBorderHandler();
             }

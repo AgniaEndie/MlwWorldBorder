@@ -1,7 +1,6 @@
 package ru.agniaendie.mlwborderlinker.handler;
 
-import net.minecraftforge.event.entity.living.LivingEvent;
-
+import net.minecraftforge.event.TickEvent;
 public interface IWorldBorderHandler {
-    void TransferEntity(LivingEvent.LivingTickEvent event);
+    void TransferEntity(TickEvent.LevelTickEvent event);
 }
