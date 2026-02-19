@@ -3,20 +3,29 @@ package ru.agniaendie.mlwborderlinker;
 import com.mojang.logging.LogUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockBehaviour;
+import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.material.MapColor;
 import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.living.LivingEvent;
+import net.minecraftforge.event.entity.player.PlayerEvent;
+import net.minecraftforge.event.server.ServerAboutToStartEvent;
+import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -33,6 +42,8 @@ import ru.agniaendie.mlwborderlinker.handler.IWorldBorderHandler;
 import ru.agniaendie.mlwborderlinker.handler.WorldBorderHandler;
 
 import static com.mojang.text2speech.Narrator.LOGGER;
+import static ru.agniaendie.mlwborderlinker.Config.xCoord;
+import static ru.agniaendie.mlwborderlinker.Config.zCoord;
 
 // The value here should match an entry in the META-INF/mods.toml file
 @Mod(MlwBorderLinker.MODID)
@@ -94,14 +105,7 @@ public class MlwBorderLinker
     private void commonSetup(final FMLCommonSetupEvent event)
     {
         // Some common setup code
-        LOGGER.info("HELLO FROM COMMON SETUP");
-
-        if (Config.logDirtBlock)
-            LOGGER.info("DIRT BLOCK >> {}", ForgeRegistries.BLOCKS.getKey(Blocks.DIRT));
-
-        LOGGER.info(Config.magicNumberIntroduction + Config.magicNumber);
-
-        Config.items.forEach((item) -> LOGGER.info("ITEM >> {}", item.toString()));
+        LOGGER.info("HELLO FROM MLW BORDER LINER SETUP");
     }
 
     // Add the example block item to the building blocks tab
@@ -130,6 +134,9 @@ public class MlwBorderLinker
             LOGGER.info("MINECRAFT NAME >> {}", Minecraft.getInstance().getUser().getName());
         }
     }
+    @Mod.EventBusSubscriber(modid = MODID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
+    public static class ClientModEventsContent {
+    }
 
     @Mod.EventBusSubscriber(modid = MODID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.DEDICATED_SERVER)
     public static class ServerModEvents{
@@ -140,6 +147,35 @@ public class MlwBorderLinker
             }
             worldBorderHandler.TransferEntity(event);
         }
-    }
+        @SubscribeEvent
+        public static void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
+            if (event.getEntity() instanceof ServerPlayer player) {
+                syncWorldBorder(player);
+                double size = player.level().getWorldBorder().getSize();
+                LOGGER.info("Player {} logged in. Syncing WorldBorder... Real Size: {}",
+                        player.getName().getString(), size);
+            }
+        }
 
+        @SubscribeEvent
+        public static void onServerStarted(ServerStartedEvent event) {
+            MinecraftServer server = event.getServer();
+            ServerLevel level = server.getLevel(Level.OVERWORLD);
+
+            if (level != null) {
+                WorldBorder border = level.getWorldBorder();
+
+                border.setSize(xCoord);
+                border.setCenter(0.5, 0.5);
+
+                LOGGER.info("Toroidal Renderer: WorldBorder set to {}x{} from config.", xCoord, zCoord);
+            }
+        }
+
+
+        private static void syncWorldBorder(ServerPlayer player) {
+            WorldBorder border = player.level().getWorldBorder();
+            player.connection.send(new net.minecraft.network.protocol.game.ClientboundInitializeBorderPacket(border));
+        }
+    }
 }
