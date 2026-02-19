@@ -50,18 +50,6 @@ public class WorldBorderHandler implements IWorldBorderHandler {
         }
     }
 
-    private boolean willBeOutside(ServerPlayer player, int cx, int cz, WorldBorder border) {
-        int sizeChunks = (int) border.getSize() >> 4;
-        int pCX = player.chunkPosition().x;
-        int pCZ = player.chunkPosition().z;
-
-        int vX = (Math.abs(cx - pCX) > sizeChunks / 2) ? (cx < pCX ? cx + sizeChunks : cx - sizeChunks) : cx;
-        int vZ = (Math.abs(cz - pCZ) > sizeChunks / 2) ? (cz < pCZ ? cz + sizeChunks : cz - sizeChunks) : cz;
-
-        return (vX << 4) < border.getMinX() || (vX << 4) >= border.getMaxX() ||
-                (vZ << 4) < border.getMinZ() || (vZ << 4) >= border.getMaxZ();
-    }
-
     @Override
     public void PushChunk(ServerPlayer player, int chunkX, int chunkZ) {
         ServerLevel level = player.serverLevel();
