@@ -35,6 +35,6 @@ jobs:
           name: Release v${{ env.VERSION }}
           # Path to your compiled jar (usually in build/libs)
           # Adjust the glob pattern if your jar name differs
-          files: build/libs/*-all.jar
+          files: build/libs/mlwborderlinker-${{ env.VERSION }}.jar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
