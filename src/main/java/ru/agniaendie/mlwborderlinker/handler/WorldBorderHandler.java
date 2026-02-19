@@ -1,16 +1,12 @@
 package ru.agniaendie.mlwborderlinker.handler;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.network.protocol.game.ClientboundInitializeBorderPacket;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
-import net.minecraft.network.protocol.game.ClientboundSetBorderSizePacket;
 import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.level.TicketType;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.chunk.ChunkStatus;
 import net.minecraft.world.level.chunk.LevelChunk;
@@ -18,9 +14,6 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
 
 import java.util.List;
-
-import static com.mojang.text2speech.Narrator.LOGGER;
-
 public class WorldBorderHandler implements IWorldBorderHandler {
 
     @Override
@@ -41,17 +34,13 @@ public class WorldBorderHandler implements IWorldBorderHandler {
                     int chunkX = Mth.floor(mirrorX) >> 4;
                     int chunkZ = Mth.floor(mirrorZ) >> 4;
 
-                    ChunkPos realPos = new ChunkPos(chunkX, chunkZ);
-                    level.getChunkSource().addRegionTicket(TicketType.FORCED, realPos, 2, realPos);
-
-                    this.PushChunk(player, chunkX, chunkZ);
-//                    for (int dx = -1; dx <= 1; dx++) {
-//                        for (int dz = -1; dz <= 1; dz++) {
-//                            if (level.getGameTime() % 10 == 0) {
-//                                this.PushChunk(player, chunkX + dx, chunkZ + dz);
-//                            }
-//                        }
-//                    }
+                    for (int dx = -1; dx <= 1; dx++) {
+                        for (int dz = -1; dz <= 1; dz++) {
+                            int sourceCX = chunkX + dx;
+                            int sourceCZ = chunkZ + dz;
+                            this.PushChunk(player, sourceCX, sourceCZ);
+                        }
+                    }
                 }
             }
 
@@ -61,43 +50,45 @@ public class WorldBorderHandler implements IWorldBorderHandler {
         }
     }
 
+    private boolean willBeOutside(ServerPlayer player, int cx, int cz, WorldBorder border) {
+        int sizeChunks = (int) border.getSize() >> 4;
+        int pCX = player.chunkPosition().x;
+        int pCZ = player.chunkPosition().z;
+
+        int vX = (Math.abs(cx - pCX) > sizeChunks / 2) ? (cx < pCX ? cx + sizeChunks : cx - sizeChunks) : cx;
+        int vZ = (Math.abs(cz - pCZ) > sizeChunks / 2) ? (cz < pCZ ? cz + sizeChunks : cz - sizeChunks) : cz;
+
+        return (vX << 4) < border.getMinX() || (vX << 4) >= border.getMaxX() ||
+                (vZ << 4) < border.getMinZ() || (vZ << 4) >= border.getMaxZ();
+    }
+
     @Override
     public void PushChunk(ServerPlayer player, int chunkX, int chunkZ) {
         ServerLevel level = player.serverLevel();
         WorldBorder border = level.getWorldBorder();
+        int sizeChunks = (int) border.getSize() >> 4;
+
+        int pCX = player.chunkPosition().x;
+        int pCZ = player.chunkPosition().z;
+
+        int vX = (Math.abs(chunkX - pCX) > sizeChunks / 2) ? (chunkX < pCX ? chunkX + sizeChunks : chunkX - sizeChunks) : chunkX;
+        int vZ = (Math.abs(chunkZ - pCZ) > sizeChunks / 2) ? (chunkZ < pCZ ? chunkZ + sizeChunks : chunkZ - sizeChunks) : chunkZ;
+
+        double checkX = (vX << 4) + 8.0D;
+        double checkZ = (vZ << 4) + 8.0D;
+
+        if (border.isWithinBounds(checkX, checkZ)) {
+            return; // Это чанк внутри мира, его трогать нельзя!
+        }
 
         LevelChunk chunk = (LevelChunk) level.getChunkSource().getChunk(chunkX, chunkZ, ChunkStatus.FULL, false);
-
         if (chunk != null) {
-            ClientboundLevelChunkWithLightPacket packet = new ClientboundLevelChunkWithLightPacket(
-                    chunk, level.getLightEngine(), null, null
-            );
-
-            int sizeChunks = (int) border.getSize() >> 4;
-
-            int playerCX = player.chunkPosition().x;
-            int playerCZ = player.chunkPosition().z;
-
-            int virtualX = chunkX;
-            int virtualZ = chunkZ;
-
-            if (Math.abs(chunkX - playerCX) > sizeChunks / 2) {
-                virtualX = (chunkX < playerCX) ? chunkX + sizeChunks : chunkX - sizeChunks;
-            }
-            if (Math.abs(chunkZ - playerCZ) > sizeChunks / 2) {
-                virtualZ = (chunkZ < playerCZ) ? chunkZ + sizeChunks : chunkZ - sizeChunks;
-            }
-
-            ru.agniaendie.mlwborderlinker.mixin.ChunkPacketAccessor accessor = (ru.agniaendie.mlwborderlinker.mixin.ChunkPacketAccessor) packet;
-            accessor.setX(virtualX);
-            accessor.setZ(virtualZ);
-
+            ClientboundLevelChunkWithLightPacket packet = new ClientboundLevelChunkWithLightPacket(chunk, level.getLightEngine(), null, null);
+            ((ru.agniaendie.mlwborderlinker.mixin.ChunkPacketAccessor) packet).setX(vX);
+            ((ru.agniaendie.mlwborderlinker.mixin.ChunkPacketAccessor) packet).setZ(vZ);
             player.connection.send(packet);
-            LOGGER.info("Toroid Push: Real[{},{}] -> Virtual[{},{}]", chunkX, chunkZ, virtualX, virtualZ);
         }
     }
-
-
 
 
     private static double getDistanceToBorder(Entity e, WorldBorder border) {

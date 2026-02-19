@@ -1,6 +1,5 @@
 package ru.agniaendie.mlwborderlinker.mixin;
 
-import net.minecraft.client.multiplayer.ClientChunkCache;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
